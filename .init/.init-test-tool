@@ -1,0 +1,4 @@
+{
+    "command": "python test_db.py",
+    "working_directory": "/home/kavia/workspace/code-generation/unified-hr-management-system-5562-5727/hrms_database"
+}
