@@ -20,12 +20,24 @@ Usage:
 - The server will be started by start_server.py (uvicorn) binding to 0.0.0.0:5001.
 """
 
+import logging
 import os
 import sqlite3
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import FastAPI, Response, status
 from pydantic import BaseModel, Field
+
+# Configure basic structured logging (non-sensitive)
+logger = logging.getLogger("hrms_db_health")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        fmt='%(asctime)s %(levelname)s hrms_database.health %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 # Constants and configuration
 DEFAULT_DB_FILENAME = "myapp.db"
@@ -64,50 +76,72 @@ def _extract_path_from_database_url(database_url: str) -> Optional[str]:
     return raw_path
 
 
-def resolve_sqlite_path() -> str:
+def _mask_path_for_log(db_path: str) -> str:
+    """
+    Mask the database path to avoid leaking sensitive absolute paths in logs.
+    Shows only the basename and whether it is absolute or relative.
+    """
+    if not db_path:
+        return "<empty>"
+    base = os.path.basename(db_path) or db_path
+    prefix = "abs" if os.path.isabs(db_path) else "rel"
+    return f"{prefix}::{base}"
+
+
+def resolve_sqlite_path() -> Tuple[str, str]:
     """
     Determine the SQLite DB file path using safe precedence order.
+    Returns a tuple of (db_path, source_env_var_name).
     """
     # DATABASE_URL (preferred for backend services)
     database_url = os.getenv("DATABASE_URL", "")
     database_url = database_url.strip() if database_url is not None else ""
     path_from_url = _extract_path_from_database_url(database_url)
     if path_from_url:
-        return path_from_url
+        return path_from_url, "DATABASE_URL"
 
     # Generic alias commonly used
     alias_path = os.getenv("SQLITE_DB_PATH", "")
     alias_path = alias_path.strip() if alias_path is not None else ""
     if alias_path:
-        return alias_path
+        return alias_path, "SQLITE_DB_PATH"
 
     # Backend-specific var
     backend_path = os.getenv("BACKEND_SQLITE_DB_PATH", "")
     backend_path = backend_path.strip() if backend_path is not None else ""
     if backend_path:
-        return backend_path
+        return backend_path, "BACKEND_SQLITE_DB_PATH"
 
     # Legacy frontend-scoped var as last resort
     frontend_path = os.getenv("REACT_APP_SQLITE_DB_PATH", "")
     frontend_path = frontend_path.strip() if frontend_path is not None else ""
     if frontend_path:
-        return frontend_path
+        return frontend_path, "REACT_APP_SQLITE_DB_PATH"
 
     # Default local file
-    return DEFAULT_DB_FILENAME
+    return DEFAULT_DB_FILENAME, "<default>"
 
 
-def _ensure_db_path(db_path: str) -> None:
+def _ensure_db_path(db_path: str) -> Tuple[bool, bool]:
     """
     Ensure directory structure exists and create an empty SQLite file if missing.
     This function is idempotent and safe to call on every readiness check.
+
+    Returns:
+        (dir_created, file_created)
     """
     if not db_path:
-        return
+        return False, False
+
+    dir_created = False
+    file_created = False
+
     parent = os.path.dirname(db_path)
     if parent and not os.path.exists(parent):
         # Create parent directories with safe permissions
         os.makedirs(parent, exist_ok=True)
+        dir_created = True
+
     if not os.path.exists(db_path):
         # Create the database by opening a connection and closing it
         conn = sqlite3.connect(db_path)
@@ -115,28 +149,44 @@ def _ensure_db_path(db_path: str) -> None:
             conn.execute("PRAGMA journal_mode=WAL;")
         finally:
             conn.close()
+        file_created = True
+
+    return dir_created, file_created
 
 
-def check_sqlite_access(db_path: str) -> tuple[bool, Optional[str]]:
+def check_sqlite_access(db_path: str) -> tuple[bool, Optional[str], dict]:
     """
     Check whether the SQLite database file exists and can be opened for a simple query.
-    Returns (is_ready, error_message_if_any)
+
+    Returns:
+        (is_ready, error_message_if_any, diagnostics_dict)
+        diagnostics_dict contains non-sensitive info: created flags, exists flags.
     """
+    diagnostics = {
+        "dir_created": False,
+        "file_created": False,
+        "file_exists": False,
+    }
     try:
         if not db_path:
-            return False, "Database path is empty"
+            return False, "Database path is empty", diagnostics
+
         # Ensure path and file are present; create if missing
-        _ensure_db_path(db_path)
+        dir_created, file_created = _ensure_db_path(db_path)
+        diagnostics["dir_created"] = dir_created
+        diagnostics["file_created"] = file_created
+        diagnostics["file_exists"] = os.path.exists(db_path)
+
         # Try opening and a small query
         conn = sqlite3.connect(db_path)
         try:
             conn.execute("SELECT 1")
         finally:
             conn.close()
-        return True, None
+        return True, None, diagnostics
     except Exception as exc:
         # Do not leak file path or stack; return minimal message
-        return False, f"Database check failed: {exc.__class__.__name__}"
+        return False, f"Database check failed: {exc.__class__.__name__}", diagnostics
 
 
 class HealthStatus(BaseModel):
@@ -193,20 +243,43 @@ def live() -> HealthStatus:
 )
 def ready(response: Response) -> HealthStatus:
     """This endpoint verifies SQLite readiness (file exists and is accessible)."""
-    db_path = resolve_sqlite_path()
-    is_ok, err = check_sqlite_access(db_path)
+    db_path, source = resolve_sqlite_path()
+    is_ok, err, diag = check_sqlite_access(db_path)
+    masked = _mask_path_for_log(db_path)
+
     if is_ok:
+        logger.info(
+            f"readiness ok sqlite path_source={source} path={masked} "
+            f"dir_created={diag.get('dir_created')} file_created={diag.get('file_created')}"
+        )
         return HealthStatus(
             status="ok",
             checks={"sqlite": "ok"},
-            details={"driver": "sqlite3"},
+            details={
+                "driver": "sqlite3",
+                "source_env": source,
+                "created": {
+                    "dir": bool(diag.get("dir_created")),
+                    "file": bool(diag.get("file_created")),
+                },
+            },
         )
+
     # unhealthy
+    logger.warning(
+        f"readiness error sqlite path_source={source} path={masked} "
+        f"error={err or 'unknown'} created_dir={diag.get('dir_created')} "
+        f"created_file={diag.get('file_created')}"
+    )
     response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return HealthStatus(
         status="error",
         checks={"sqlite": "error"},
-        details={"reason": "not_ready", "error": err or "unknown"},
+        details={
+            "reason": "not_ready",
+            "error": err or "unknown",
+            "source_env": source,
+        },
     )
 
 
@@ -220,11 +293,24 @@ def ready(response: Response) -> HealthStatus:
 )
 def health(response: Response) -> HealthStatus:
     """This endpoint aggregates basic service health including DB file presence."""
-    db_path = resolve_sqlite_path()
-    is_ok, err = check_sqlite_access(db_path)
+    db_path, source = resolve_sqlite_path()
+    is_ok, err, diag = check_sqlite_access(db_path)
     overall = "ok" if is_ok else "error"
-    if not is_ok:
+    masked = _mask_path_for_log(db_path)
+
+    if is_ok:
+        logger.info(
+            f"health ok process=ok sqlite=ok path_source={source} path={masked} "
+            f"dir_created={diag.get('dir_created')} file_created={diag.get('file_created')}"
+        )
+    else:
+        logger.warning(
+            f"health error process=ok sqlite=error path_source={source} path={masked} "
+            f"error={err or 'unknown'} created_dir={diag.get('dir_created')} "
+            f"created_file={diag.get('file_created')}"
+        )
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
     # Note: We avoid returning exact file path for security; provide minimal details.
     return HealthStatus(
         status=overall,
@@ -232,5 +318,16 @@ def health(response: Response) -> HealthStatus:
             "process": "ok",
             "sqlite": "ok" if is_ok else "error",
         },
-        details={"driver": "sqlite3"} if is_ok else {"reason": "not_ready", "error": err or "unknown"},
+        details=(
+            {
+                "driver": "sqlite3",
+                "source_env": source,
+                "created": {
+                    "dir": bool(diag.get("dir_created")),
+                    "file": bool(diag.get("file_created")),
+                },
+            }
+            if is_ok
+            else {"reason": "not_ready", "error": err or "unknown", "source_env": source}
+        ),
     )
