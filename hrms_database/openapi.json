@@ -1,0 +1,47 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HRMS Database Readiness Service",
+    "description": "Health and readiness endpoints for the hrms_database container (SQLite).",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health Check",
+        "description": "Returns 200 if the readiness service is running.",
+        "operationId": "health_check_get",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Kubernetes-style health check",
+        "description": "Alias for / that returns 200 if the service is running.",
+        "operationId": "healthz_get",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "/readiness": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Readiness Check",
+        "description": "Verifies SQLite database connectivity using a simple query. Returns 200 if ready.",
+        "operationId": "readiness_get",
+        "responses": {
+          "200": { "description": "Ready" },
+          "503": { "description": "Not Ready" }
+        }
+      }
+    }
+  },
+  "tags": [
+    { "name": "Health", "description": "Service health and readiness checks" }
+  ]
+}
