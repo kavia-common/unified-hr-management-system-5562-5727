@@ -33,9 +33,10 @@ DEFAULT_PORT = 5001
 
 # Resolve DB path from environment variables in order of precedence:
 # 1) DATABASE_URL if it starts with sqlite:// (standard)
-# 2) BACKEND_SQLITE_DB_PATH (backend-specific)
-# 3) REACT_APP_SQLITE_DB_PATH (legacy/frontend-scoped; fallback only)
-# 4) Local default file "myapp.db"
+# 2) SQLITE_DB_PATH (common alias used by some orchestrators)
+# 3) BACKEND_SQLITE_DB_PATH (backend-specific)
+# 4) REACT_APP_SQLITE_DB_PATH (legacy/frontend-scoped; fallback only)
+# 5) Local default file "myapp.db"
 def _extract_path_from_database_url(database_url: str) -> Optional[str]:
     """
     Safely extract a SQLite file path from a DATABASE_URL formatted as sqlite:///path/to/file.db.
@@ -68,23 +69,52 @@ def resolve_sqlite_path() -> str:
     Determine the SQLite DB file path using safe precedence order.
     """
     # DATABASE_URL (preferred for backend services)
-    database_url = os.getenv("DATABASE_URL", "").strip()
+    database_url = os.getenv("DATABASE_URL", "")
+    database_url = database_url.strip() if database_url is not None else ""
     path_from_url = _extract_path_from_database_url(database_url)
     if path_from_url:
         return path_from_url
 
+    # Generic alias commonly used
+    alias_path = os.getenv("SQLITE_DB_PATH", "")
+    alias_path = alias_path.strip() if alias_path is not None else ""
+    if alias_path:
+        return alias_path
+
     # Backend-specific var
-    backend_path = os.getenv("BACKEND_SQLITE_DB_PATH", "").strip()
+    backend_path = os.getenv("BACKEND_SQLITE_DB_PATH", "")
+    backend_path = backend_path.strip() if backend_path is not None else ""
     if backend_path:
         return backend_path
 
     # Legacy frontend-scoped var as last resort
-    frontend_path = os.getenv("REACT_APP_SQLITE_DB_PATH", "").strip()
+    frontend_path = os.getenv("REACT_APP_SQLITE_DB_PATH", "")
+    frontend_path = frontend_path.strip() if frontend_path is not None else ""
     if frontend_path:
         return frontend_path
 
     # Default local file
     return DEFAULT_DB_FILENAME
+
+
+def _ensure_db_path(db_path: str) -> None:
+    """
+    Ensure directory structure exists and create an empty SQLite file if missing.
+    This function is idempotent and safe to call on every readiness check.
+    """
+    if not db_path:
+        return
+    parent = os.path.dirname(db_path)
+    if parent and not os.path.exists(parent):
+        # Create parent directories with safe permissions
+        os.makedirs(parent, exist_ok=True)
+    if not os.path.exists(db_path):
+        # Create the database by opening a connection and closing it
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+        finally:
+            conn.close()
 
 
 def check_sqlite_access(db_path: str) -> tuple[bool, Optional[str]]:
@@ -95,9 +125,8 @@ def check_sqlite_access(db_path: str) -> tuple[bool, Optional[str]]:
     try:
         if not db_path:
             return False, "Database path is empty"
-        # Existence check
-        if not os.path.exists(db_path):
-            return False, "Database file not found"
+        # Ensure path and file are present; create if missing
+        _ensure_db_path(db_path)
         # Try opening and a small query
         conn = sqlite3.connect(db_path)
         try:
@@ -177,7 +206,7 @@ def ready(response: Response) -> HealthStatus:
     return HealthStatus(
         status="error",
         checks={"sqlite": "error"},
-        details={"reason": "not_ready"},
+        details={"reason": "not_ready", "error": err or "unknown"},
     )
 
 
@@ -203,5 +232,5 @@ def health(response: Response) -> HealthStatus:
             "process": "ok",
             "sqlite": "ok" if is_ok else "error",
         },
-        details={"driver": "sqlite3"} if is_ok else {"reason": "not_ready"},
+        details={"driver": "sqlite3"} if is_ok else {"reason": "not_ready", "error": err or "unknown"},
     )

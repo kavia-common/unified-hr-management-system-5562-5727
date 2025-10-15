@@ -11,9 +11,14 @@ This container packages the SQLite database and exposes a lightweight health ser
 
 Environment variables (configure via orchestrator):
 - DATABASE_URL (preferred for backend): sqlite:////absolute/path/to/myapp.db
+- SQLITE_DB_PATH (alias): /absolute/path/to/myapp.db
 - BACKEND_SQLITE_DB_PATH (alternative): /absolute/path/to/myapp.db
 - REACT_APP_SQLITE_DB_PATH (legacy fallback): not recommended for backend use
 - HEALTH_SERVER_PORT: default 5001
+
+Notes:
+- If the SQLite file or its parent directory does not exist, the readiness probe will create the directory and initialize an empty SQLite file automatically so the container can become ready.
+- Ensure the backend uses the same file path or DATABASE_URL. Mapping REACT_APP_SQLITE_DB_PATH to SQLITE_DB_PATH or DATABASE_URL is supported.
 
 The backend must point to the same SQLite file. Ensure the path is accessible in the backend container (e.g., via a shared volume or consistent image path).
 
