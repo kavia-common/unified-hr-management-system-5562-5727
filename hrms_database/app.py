@@ -217,6 +217,7 @@ app = FastAPI(
     version="1.0.0",
     openapi_tags=[
         {"name": "Health", "description": "Service liveness and readiness endpoints"},
+        {"name": "Docs", "description": "Documentation and service usage information"},
     ],
 )
 
@@ -339,3 +340,21 @@ def health(response: Response) -> HealthStatus:
             else {"reason": "not_ready", "error": err or "unknown", "source_env": source}
         ),
     )
+
+# PUBLIC_INTERFACE
+@app.get(
+    "/docs-about-ws",
+    tags=["Docs"],
+    summary="WebSocket usage note",
+    description=(
+        "This service does not expose WebSocket endpoints. "
+        "Health endpoints available: GET /live, GET /ready, GET /health. "
+        "The optional db_visualizer must be run separately on port 5002 and is not part of this FastAPI app."
+    ),
+)
+def docs_about_ws() -> dict:
+    \"\"\"Informational endpoint clarifying that this service has no WebSocket interfaces.\"\"\"
+    return {
+        "websocket": "none",
+        "notes": "Use /live, /ready, /health for monitoring. Visualizer runs separately on port 5002 if enabled."
+    }
