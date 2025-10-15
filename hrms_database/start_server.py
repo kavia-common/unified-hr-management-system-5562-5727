@@ -21,6 +21,9 @@ if __name__ == "__main__":
         print("Invalid HEALTH_SERVER_PORT; defaulting to 5001", file=sys.stderr)
         port = 5001
 
+    # Minimal explicit print to STDOUT for orchestrator logs (non-sensitive)
+    print(f"[hrms_database] Starting FastAPI health server on 0.0.0.0:{port} (HEALTH_SERVER_PORT).")
+    print("[hrms_database] Note: db_visualizer is not started by this process. Use PORT=5002 npm start separately if needed.")
     uvicorn.run(
         "app:app",
         host="0.0.0.0",

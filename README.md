@@ -4,7 +4,7 @@
 
 The hrms_database container includes a lightweight FastAPI health service listening on port 5001. It validates that the SQLite database file exists and can be opened.
 
-- Service: FastAPI (uvicorn), binds 0.0.0.0:5001 by default via start_server.py
+- Service: FastAPI (uvicorn), binds 0.0.0.0:5001 by default via start_server.py (Python process only; no Node/npm on 5001)
 - Port: 5001
 - Endpoints:
   - GET /live -> 200 when the process is running

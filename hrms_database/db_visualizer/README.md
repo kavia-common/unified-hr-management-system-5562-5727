@@ -13,3 +13,6 @@ The SQLite DB path is written by init_db.py into sqlite.env:
 
 Environment vars:
 - SQLITE_DB: absolute path to SQLite database file
+
+Operational notes:
+- Do NOT use port 5001. The visualizer refuses to start with PORT=5001 to avoid collision with the FastAPI health server.

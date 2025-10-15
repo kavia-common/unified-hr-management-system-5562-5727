@@ -48,3 +48,20 @@ Verification:
 - curl http://localhost:5001/health -> 200 when ready
 - curl http://localhost:5001/ready -> 200 when DB file is present and accessible
 - If not ready, the response includes a reason and source_env for diagnostics (non-sensitive).
+- Expected JSON diagnostics (example):
+  {
+    "status":"ok",
+    "checks":{"process":"ok","sqlite":"ok"},
+    "details":{
+      "driver":"sqlite",
+      "source_env":"SQLITE_DB_PATH",
+      "db_path_mask":"abs::myapp.db",
+      "abs_path": true,
+      "created":{"dir":false,"file":false}
+    }
+  }
+
+Port binding and startup:
+- Only the FastAPI server (python/uvicorn) must listen on 5001.
+- db_visualizer must not run on 5001; default to 5002. Start separately if needed:
+  cd hrms_database/db_visualizer && npm install --production && PORT=5002 npm start

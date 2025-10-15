@@ -105,28 +105,36 @@ def resolve_sqlite_path() -> Tuple[str, str]:
     database_url = database_url.strip() if database_url is not None else ""
     path_from_url = _extract_path_from_database_url(database_url)
     if path_from_url:
-        return path_from_url, "DATABASE_URL"
+        db_path = path_from_url
+        source = "DATABASE_URL"
+    else:
+        # Generic alias commonly used
+        alias_path = os.getenv("SQLITE_DB_PATH", "")
+        alias_path = alias_path.strip() if alias_path is not None else ""
+        if alias_path:
+            db_path, source = alias_path, "SQLITE_DB_PATH"
+        else:
+            # Backend-specific var
+            backend_path = os.getenv("BACKEND_SQLITE_DB_PATH", "")
+            backend_path = backend_path.strip() if backend_path is not None else ""
+            if backend_path:
+                db_path, source = backend_path, "BACKEND_SQLITE_DB_PATH"
+            else:
+                # Legacy frontend-scoped var as last resort
+                frontend_path = os.getenv("REACT_APP_SQLITE_DB_PATH", "")
+                frontend_path = frontend_path.strip() if frontend_path is not None else ""
+                if frontend_path:
+                    db_path, source = frontend_path, "REACT_APP_SQLITE_DB_PATH"
+                else:
+                    # Default local file
+                    db_path, source = DEFAULT_DB_FILENAME, "<default>"
 
-    # Generic alias commonly used
-    alias_path = os.getenv("SQLITE_DB_PATH", "")
-    alias_path = alias_path.strip() if alias_path is not None else ""
-    if alias_path:
-        return alias_path, "SQLITE_DB_PATH"
-
-    # Backend-specific var
-    backend_path = os.getenv("BACKEND_SQLITE_DB_PATH", "")
-    backend_path = backend_path.strip() if backend_path is not None else ""
-    if backend_path:
-        return backend_path, "BACKEND_SQLITE_DB_PATH"
-
-    # Legacy frontend-scoped var as last resort
-    frontend_path = os.getenv("REACT_APP_SQLITE_DB_PATH", "")
-    frontend_path = frontend_path.strip() if frontend_path is not None else ""
-    if frontend_path:
-        return frontend_path, "REACT_APP_SQLITE_DB_PATH"
-
-    # Default local file
-    return DEFAULT_DB_FILENAME, "<default>"
+    # Normalize to absolute path to avoid ambiguity and ensure consistent writability checks
+    try:
+        abs_path = os.path.abspath(db_path)
+    except Exception:
+        abs_path = db_path  # fallback, though unlikely
+    return abs_path, source
 
 
 def _ensure_db_path(db_path: str) -> Tuple[bool, bool]:
@@ -265,8 +273,10 @@ def ready(response: Response) -> HealthStatus:
             status="ok",
             checks={"sqlite": "ok"},
             details={
-                "driver": "sqlite3",
+                "driver": "sqlite",
                 "source_env": source,
+                "db_path_mask": masked,
+                "abs_path": os.path.isabs(db_path),
                 "created": {
                     "dir": bool(diag.get("dir_created")),
                     "file": bool(diag.get("file_created")),
@@ -288,6 +298,8 @@ def ready(response: Response) -> HealthStatus:
             "reason": "not_ready",
             "error": err or "unknown",
             "source_env": source,
+            "db_path_mask": masked,
+            "abs_path": os.path.isabs(db_path),
         },
     )
 
@@ -329,15 +341,23 @@ def health(response: Response) -> HealthStatus:
         },
         details=(
             {
-                "driver": "sqlite3",
+                "driver": "sqlite",
                 "source_env": source,
+                "db_path_mask": masked,
+                "abs_path": os.path.isabs(db_path),
                 "created": {
                     "dir": bool(diag.get("dir_created")),
                     "file": bool(diag.get("file_created")),
                 },
             }
             if is_ok
-            else {"reason": "not_ready", "error": err or "unknown", "source_env": source}
+            else {
+                "reason": "not_ready",
+                "error": err or "unknown",
+                "source_env": source,
+                "db_path_mask": masked,
+                "abs_path": os.path.isabs(db_path),
+            }
         ),
     )
 
@@ -353,8 +373,33 @@ def health(response: Response) -> HealthStatus:
     ),
 )
 def docs_about_ws() -> dict:
-    \"\"\"Informational endpoint clarifying that this service has no WebSocket interfaces.\"\"\"
+    """Informational endpoint clarifying that this service has no WebSocket interfaces."""
     return {
         "websocket": "none",
         "notes": "Use /live, /ready, /health for monitoring. Visualizer runs separately on port 5002 if enabled."
+    }
+
+
+# PUBLIC_INTERFACE
+@app.get(
+    "/about",
+    tags=["Docs"],
+    summary="Service info",
+    description=(
+        "Returns non-sensitive information about the health service, including port, "
+        "driver, and a note that the db_visualizer is not started by this server."
+    ),
+)
+def about() -> dict:
+    """Non-sensitive diagnostics to help identify the process on the bound port."""
+    db_path, source = resolve_sqlite_path()
+    masked = _mask_path_for_log(db_path)
+    return {
+        "service": "hrms_database_health",
+        "driver": "sqlite",
+        "port_env": os.getenv("HEALTH_SERVER_PORT", str(DEFAULT_PORT)),
+        "db_path_mask": masked,
+        "abs_path": os.path.isabs(db_path),
+        "source_env": source,
+        "db_visualizer_started_here": False,
     }

@@ -39,17 +39,27 @@ def resolve_sqlite_path() -> Tuple[str, str]:
     database_url = os.getenv("DATABASE_URL", "").strip()
     path_from_url = _extract_path_from_database_url(database_url)
     if path_from_url:
-        return path_from_url, "DATABASE_URL"
-    alias_path = os.getenv("SQLITE_DB_PATH", "").strip()
-    if alias_path:
-        return alias_path, "SQLITE_DB_PATH"
-    backend_path = os.getenv("BACKEND_SQLITE_DB_PATH", "").strip()
-    if backend_path:
-        return backend_path, "BACKEND_SQLITE_DB_PATH"
-    frontend_path = os.getenv("REACT_APP_SQLITE_DB_PATH", "").strip()
-    if frontend_path:
-        return frontend_path, "REACT_APP_SQLITE_DB_PATH"
-    return DEFAULT_DB_FILENAME, "<default>"
+        db_path, source = path_from_url, "DATABASE_URL"
+    else:
+        alias_path = os.getenv("SQLITE_DB_PATH", "").strip()
+        if alias_path:
+            db_path, source = alias_path, "SQLITE_DB_PATH"
+        else:
+            backend_path = os.getenv("BACKEND_SQLITE_DB_PATH", "").strip()
+            if backend_path:
+                db_path, source = backend_path, "BACKEND_SQLITE_DB_PATH"
+            else:
+                frontend_path = os.getenv("REACT_APP_SQLITE_DB_PATH", "").strip()
+                if frontend_path:
+                    db_path, source = frontend_path, "REACT_APP_SQLITE_DB_PATH"
+                else:
+                    db_path, source = DEFAULT_DB_FILENAME, "<default>"
+    # Normalize to absolute path for deterministic file operations
+    try:
+        abs_path = os.path.abspath(db_path)
+    except Exception:
+        abs_path = db_path
+    return abs_path, source
 
 def ensure_db_path(db_path: str) -> Tuple[bool, bool]:
     """Ensure parent dir exists and create empty DB if missing. Returns (dir_created, file_created)."""

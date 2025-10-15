@@ -41,4 +41,7 @@ ENV HEALTH_SERVER_PORT=5001
 # If you wish to run the optional db_visualizer, do so separately, for example:
 #   (cd hrms_database/db_visualizer && npm install --production && PORT=5002 npm start &)
 # ensuring it never binds to 5001 and does not block the health server readiness.
+# Health verification from host (example):
+#   curl -sSf http://localhost:5001/health
+#   curl -sSf http://localhost:5001/ready
 CMD ["python", "start_server.py"]
