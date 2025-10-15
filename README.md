@@ -30,8 +30,11 @@ Behavior:
 - Health responses include non-sensitive diagnostics and logs mask the database path (basename only) to avoid leaking sensitive details.
 
 Visualizer:
-- The optional db_visualizer is a Node/Express utility. If you wish to run it, use a different port (e.g., 5002) so it never replaces the health server on 5001:
-  PORT=5002 node hrms_database/db_visualizer/server.js --host 0.0.0.0
+- The optional db_visualizer is a Node/Express utility. It must not run on 5001 (reserved for health server).
+- Install dependencies once:
+  cd hrms_database/db_visualizer && npm install --production
+- Run it on a different port (e.g., 5002):
+  PORT=5002 npm start
 - The init script writes hrms_database/db_visualizer/sqlite.env pointing to the resolved DB path.
 
 The backend should use the same SQLite path. A .env.example is provided in hrms_database/.env.example.

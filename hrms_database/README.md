@@ -29,8 +29,11 @@ Notes:
 - Ensure the backend uses the same file path or DATABASE_URL. Mapping REACT_APP_SQLITE_DB_PATH to SQLITE_DB_PATH or DATABASE_URL is supported.
 
 Visualizer:
-- The optional db_visualizer (Node/Express) should not occupy port 5001. Run it explicitly on a separate port (e.g., 5002):
-  PORT=5002 node hrms_database/db_visualizer/server.js --host 0.0.0.0
+- The optional db_visualizer (Node/Express) must not occupy port 5001. Run it explicitly on a separate port (default 5002).
+- Install dependencies before starting:
+  cd hrms_database/db_visualizer && npm install --production
+- Start on 5002:
+  PORT=5002 npm start
 - The init_db.py script writes hrms_database/db_visualizer/sqlite.env to point the viewer at the resolved DB file.
 
 Security:

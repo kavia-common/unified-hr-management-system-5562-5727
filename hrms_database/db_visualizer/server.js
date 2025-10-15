@@ -340,7 +340,8 @@ const envInfo = {
 
 const PORT = process.env.PORT || 5002; // Default to 5002 to avoid clashing with health server on 5001
 app.listen(PORT, () => {
-  console.log(`Database viewer running on http://localhost:${PORT}`);
+  console.log(`Database viewer running on http://0.0.0.0:${PORT}`);
+  console.log('Note: Port 5001 is reserved for the FastAPI health server. Do not use 5001 here.');
   console.log('\nEnvironment variables expected:');
   Object.entries(envInfo).forEach(([db, vars]) => {
     console.log(`${db}: ${vars}`);

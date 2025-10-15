@@ -211,7 +211,8 @@ app = FastAPI(
     title="HRMS Database Health Service",
     description=(
         "Lightweight service exposing liveness and readiness endpoints for the hrms_database container. "
-        "It validates access to the SQLite database file expected by the backend."
+        "It validates access to the SQLite database file expected by the backend. "
+        "Port 5001 is reserved for this health service; the optional db_visualizer must run on 5002."
     ),
     version="1.0.0",
     openapi_tags=[
