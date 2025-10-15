@@ -1,7 +1,9 @@
 """
 Entrypoint script to run the FastAPI health service using Uvicorn.
 
-This script ensures the service binds to 0.0.0.0:5001 and logs concisely.
+This script ensures the service binds to 0.0.0.0:5001 (configurable via HEALTH_SERVER_PORT)
+and logs concisely. Do not run any React/Node web server on port 5001; this port is reserved
+exclusively for the FastAPI health endpoints (/live, /ready, /health).
 """
 
 import os

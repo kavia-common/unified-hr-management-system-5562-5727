@@ -1,0 +1,13 @@
+# DB Visualizer
+
+This optional Node/Express utility can view database tables. It must not run on port 5001 as that port is reserved for the hrms_database FastAPI health server.
+
+- Default port: 5002 (can be overridden with PORT env variable)
+- Start:
+  PORT=5002 npm start
+
+The SQLite DB path is written by init_db.py into sqlite.env:
+  source hrms_database/db_visualizer/sqlite.env
+
+Environment vars:
+- SQLITE_DB: absolute path to SQLite database file

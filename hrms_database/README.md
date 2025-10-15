@@ -2,7 +2,7 @@
 
 This container packages the SQLite database and exposes a lightweight health server so orchestrators can detect readiness on a TCP port.
 
-- Health server: FastAPI via Uvicorn
+- Health server: FastAPI via Uvicorn (start_server.py)
 - Port: 5001 (configurable with HEALTH_SERVER_PORT)
 - Endpoints:
   - GET /live -> liveness
@@ -16,7 +16,7 @@ Environment variables (configure via orchestrator):
 - REACT_APP_SQLITE_DB_PATH (legacy fallback): not recommended for backend use
 - HEALTH_SERVER_PORT: default 5001
 
-Precedence for resolving SQLite path:
+Precedence for resolving SQLite path (applied consistently by init_db.py and app.py):
 1. DATABASE_URL (only if it starts with sqlite://)
 2. SQLITE_DB_PATH
 3. BACKEND_SQLITE_DB_PATH
@@ -28,7 +28,10 @@ Notes:
 - The health endpoints include non-sensitive diagnostics (e.g., source_env used and created flags) and log concise messages without exposing absolute paths.
 - Ensure the backend uses the same file path or DATABASE_URL. Mapping REACT_APP_SQLITE_DB_PATH to SQLITE_DB_PATH or DATABASE_URL is supported.
 
-The backend must point to the same SQLite file. Ensure the path is accessible in the backend container (e.g., via a shared volume or consistent image path).
+Visualizer:
+- The optional db_visualizer (Node/Express) should not occupy port 5001. Run it explicitly on a separate port (e.g., 5002):
+  PORT=5002 node hrms_database/db_visualizer/server.js --host 0.0.0.0
+- The init_db.py script writes hrms_database/db_visualizer/sqlite.env to point the viewer at the resolved DB file.
 
 Security:
 - No sensitive paths are logged or returned in responses; logs mask absolute paths.
@@ -36,8 +39,9 @@ Security:
 
 Startup:
 - The image runs `python start_server.py` which launches the health server and binds to 0.0.0.0 at port 5001 by default.
-- The `init_db.py` script creates/validates the SQLite database file (`myapp.db`) during build.
+- The `init_db.py` script creates/validates the SQLite database file during build/start.
 
 Verification:
 - curl http://localhost:5001/health -> 200 when ready
-- curl http://localhost:5001/ready -> 200 when DB file is present
+- curl http://localhost:5001/ready -> 200 when DB file is present and accessible
+- If not ready, the response includes a reason and source_env for diagnostics (non-sensitive).

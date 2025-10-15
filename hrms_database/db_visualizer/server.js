@@ -338,7 +338,7 @@ const envInfo = {
   MongoDB: 'MONGODB_URL, MONGODB_DB'
 };
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5002; // Default to 5002 to avoid clashing with health server on 5001
 app.listen(PORT, () => {
   console.log(`Database viewer running on http://localhost:${PORT}`);
   console.log('\nEnvironment variables expected:');

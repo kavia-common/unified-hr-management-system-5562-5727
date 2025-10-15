@@ -4,7 +4,7 @@
 
 The hrms_database container includes a lightweight FastAPI health service listening on port 5001. It validates that the SQLite database file exists and can be opened.
 
-- Service: FastAPI (uvicorn)
+- Service: FastAPI (uvicorn), binds 0.0.0.0:5001 by default via start_server.py
 - Port: 5001
 - Endpoints:
   - GET /live -> 200 when the process is running
@@ -18,7 +18,7 @@ Environment variables (configure via orchestrator, do not hardcode):
 - REACT_APP_SQLITE_DB_PATH: legacy/fallback only
 - HEALTH_SERVER_PORT: default 5001
 
-Resolution precedence for SQLite path:
+Resolution precedence for SQLite path (used consistently by both init_db.py and the health service):
 1) DATABASE_URL (only if it starts with sqlite://), else
 2) SQLITE_DB_PATH, else
 3) BACKEND_SQLITE_DB_PATH, else
@@ -28,5 +28,10 @@ Resolution precedence for SQLite path:
 Behavior:
 - The readiness check will create the database folder and initialize an empty DB file if missing, then return 200 once the DB is usable.
 - Health responses include non-sensitive diagnostics and logs mask the database path (basename only) to avoid leaking sensitive details.
+
+Visualizer:
+- The optional db_visualizer is a Node/Express utility. If you wish to run it, use a different port (e.g., 5002) so it never replaces the health server on 5001:
+  PORT=5002 node hrms_database/db_visualizer/server.js --host 0.0.0.0
+- The init script writes hrms_database/db_visualizer/sqlite.env pointing to the resolved DB path.
 
 The backend should use the same SQLite path. A .env.example is provided in hrms_database/.env.example.

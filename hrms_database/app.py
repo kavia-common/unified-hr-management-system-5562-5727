@@ -88,10 +88,17 @@ def _mask_path_for_log(db_path: str) -> str:
     return f"{prefix}::{base}"
 
 
+# PUBLIC_INTERFACE
 def resolve_sqlite_path() -> Tuple[str, str]:
     """
     Determine the SQLite DB file path using safe precedence order.
     Returns a tuple of (db_path, source_env_var_name).
+    Resolution precedence:
+      1) DATABASE_URL (sqlite:// only)
+      2) SQLITE_DB_PATH
+      3) BACKEND_SQLITE_DB_PATH
+      4) REACT_APP_SQLITE_DB_PATH
+      5) myapp.db (local default)
     """
     # DATABASE_URL (preferred for backend services)
     database_url = os.getenv("DATABASE_URL", "")
